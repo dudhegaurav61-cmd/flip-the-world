@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#080b18">
+<title>FLIP THE WORLD</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b18;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+#wrap{height:100%;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 20%,#18224b 0,#080b18 70%)}
+canvas{display:block;width:100vw;height:100dvh;max-width:900px;max-height:100dvh;object-fit:contain;touch-action:none}
+#hud{position:fixed;inset:env(safe-area-inset-top) 0 auto 0;display:flex;justify-content:space-between;padding:12px 16px;pointer-events:none;color:#eaf4ff;font-weight:700;letter-spacing:.04em;text-shadow:0 2px 8px #000}
+#flip{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);border:1px solid #72eaff;background:linear-gradient(135deg,#174d75,#26246b);color:white;border-radius:999px;padding:14px 32px;font-size:16px;font-weight:800;letter-spacing:.12em;box-shadow:0 0 28px #23c8ff55;display:none}
+#flip:active{transform:translateX(-50%) scale(.96)}
+#hint{position:fixed;bottom:calc(88px + env(safe-area-inset-bottom));width:100%;text-align:center;color:#b9d4ee;font-size:12px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="900" height="600" aria-label="Flip the World game"></canvas></div>
+<div id="hud"><span id="level">LEVEL 1</span><span id="progress">0%</span></div>
+<div id="hint"></div><button id="flip">FLIP GRAVITY</button>
+<script>
+(()=>{
+const c=document.getElementById('game'),ctx=c.getContext('2d'),flipBtn=document.getElementById('flip');
+const levelEl=document.getElementById('level'),progressEl=document.getElementById('progress'),hint=document.getElementById('hint');
+const W=900,H=600,top=105,bottom=495,playerY0=bottom-30;
+const levels=[
+ {name:"First Steps",len:2600,obs:[[520,0],[880,1],[1230,0],[1610,1],[1980,0],[2280,1]]},
+ {name:"Switch It",len:3000,obs:[[430,0],[700,1],[980,1],[1270,0],[1550,1],[1840,0],[2170,0],[2500,1]]},
+ {name:"Mind The Gap",len:3400,obs:[[500,1],[780,0],[1060,0],[1340,1],[1630,0],[1900,1],[2200,1],[2510,0],[2860,1]]},
+ {name:"Quick Reflex",len:3700,obs:[[430,0],[660,1],[900,0],[1150,1],[1420,1],[1700,0],[1980,1],[2260,0],[2550,1],[2900,0],[3260,1]]},
+ {name:"The Exit",len:4100,obs:[[520,1],[790,0],[1080,1],[1370,0],[1650,1],[1950,0],[2240,1],[2530,0],[2820,1],[3130,0],[3470,1],[3750,0]]}
+];
+let state='menu',level=0,worldX=0,gravity=1,score=0,best=Number(localStorage.getItem('ftwBest')||0),last=0,particles=[],flash=0;
+const player={x:170,y:0,r:17,vy:0};
+function reset(){worldX=0;gravity=1;player.y=bottom-22;player.vy=0;particles=[];flash=0;state='playing';flipBtn.style.display='block';hint.textContent='Tap anywhere or press FLIP GRAVITY to switch sides';}
+function start(){level=0;score=0;reset();}
+function flip(){if(state!=='playing')return;gravity*=-1;player.vy=0;player.y=gravity===1?top+22:bottom-22;for(let i=0;i<9;i++)particles.push({x:player.x,y:player.y,vx:(Math.random()-.5)*5,vy:(Math.random()-.5)*5,life:25});}
+function hit(){state='dead';flipBtn.style.display='none';hint.textContent='';}
+function next(){level++;if(level>=levels.length){state='won';flipBtn.style.display='none';best=Math.max(best,score);localStorage.setItem('ftwBest',best);return;}reset();}
+function rounded(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#0d1533');bg.addColorStop(1,'#090b19');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+ // star field
+ for(let i=0;i<65;i++){let x=(i*137+((worldX*.12)%W))%W,y=(i*71)%H;ctx.fillStyle=i%3?'#6688b855':'#a3f5ff88';ctx.fillRect(x,y,2,2);}
+ // rails
+ ctx.shadowBlur=18;ctx.shadowColor='#42dfff';ctx.fillStyle='#36c9ee';ctx.fillRect(0,top,W,3);ctx.fillRect(0,bottom,W,3);ctx.shadowBlur=0;
+ // distant grid
+ ctx.strokeStyle='#24416b55';ctx.lineWidth=1;for(let x=-((worldX*.35)%60);x<W;x+=60){ctx.beginPath();ctx.moveTo(x,top+5);ctx.lineTo(x,bottom-5);ctx.stroke();}
+ const L=levels[level]||levels[0],cam=worldX;
+ for(const [ox,side] of L.obs){let x=ox-cam+player.x;if(x<-60||x>W+60)continue;let y=side===0?bottom-54:top+3;ctx.save();ctx.shadowBlur=18;ctx.shadowColor='#ff4f9a';ctx.fillStyle='#ff4f9a';ctx.beginPath();if(side===0){ctx.moveTo(x-24,bottom-3);ctx.lineTo(x,bottom-53);ctx.lineTo(x+24,bottom-3)}else{ctx.moveTo(x-24,top+3);ctx.lineTo(x,top+53);ctx.lineTo(x+24,top+3)}ctx.closePath();ctx.fill();ctx.restore();}
+ // portal
+ let exitX=L.len-cam+player.x;if(exitX>-80&&exitX<W+80){ctx.save();ctx.translate(exitX,(top+bottom)/2);ctx.shadowBlur=30;ctx.shadowColor='#9b72ff';ctx.strokeStyle='#c3a5ff';ctx.lineWidth=9;ctx.beginPath();ctx.ellipse(0,0,25,68,0,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#5eeaff';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,0,14,54,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+ // player
+ ctx.save();ctx.translate(player.x,player.y);ctx.shadowBlur=24;ctx.shadowColor='#66f4ff';ctx.fillStyle='#e9fdff';rounded(-15,-15,30,30,9);ctx.shadowBlur=0;ctx.fillStyle='#10244b';ctx.beginPath();ctx.arc(-5,-3,3,0,7);ctx.arc(6,-3,3,0,7);ctx.fill();ctx.strokeStyle='#35d8ee';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-6,7);ctx.quadraticCurveTo(0,12,7,7);ctx.stroke();ctx.restore();
+ for(let p of particles){ctx.globalAlpha=Math.max(0,p.life/25);ctx.fillStyle='#7df4ff';ctx.fillRect(p.x,p.y,4,4);ctx.globalAlpha=1;}
+ if(state==='menu'||state==='dead'||state==='won')overlay();
+}
+function overlay(){
+ ctx.fillStyle='#050817bb';ctx.fillRect(0,0,W,H);ctx.textAlign='center';
+ ctx.shadowBlur=22;ctx.shadowColor='#36dff5';ctx.fillStyle='#e9fbff';ctx.font='900 58px system-ui';ctx.fillText(state==='menu'?'FLIP THE WORLD':state==='dead'?'TRY AGAIN':'WORLD SAVED!',W/2,210);ctx.shadowBlur=0;
+ ctx.fillStyle='#b9d9f5';ctx.font='22px system-ui';
+ let sub=state==='menu'?'Flip gravity. Dodge the spikes. Reach the portal.':state==='dead'?'You hit an obstacle. One more try?':'You completed all five levels!';
+ ctx.fillText(sub,W/2,260);
+ ctx.fillStyle='#70eaff';rounded(W/2-120,315,240,64,18);ctx.fillStyle='#07152b';ctx.font='800 23px system-ui';ctx.fillText(state==='menu'?'START GAME':state==='dead'?'RESTART':'PLAY AGAIN',W/2,356);
+ ctx.fillStyle='#9cb6d3';ctx.font='16px system-ui';ctx.fillText('Best score: '+best,W/2,420);
+}
+function update(dt){
+ if(state!=='playing')return;
+ const L=levels[level],speed=3.4;
+ worldX+=speed*dt/16.67;score=Math.floor(worldX/10);progressEl.textContent=Math.min(100,Math.floor(worldX/L.len*100))+'%';levelEl.textContent='LEVEL '+(level+1)+' · '+L.name.toUpperCase();
+ // gentle bob
+ player.y=(gravity===1?bottom-22:top+22)+Math.sin(worldX*.08)*2;
+ for(const [ox,side] of L.obs){let x=ox-worldX+player.x;if(Math.abs(x-player.x)<25&&side===(gravity===1?0:1)){hit();break;}}
+ if(worldX>=L.len){next();}
+ particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--});particles=particles.filter(p=>p.life>0);
+}
+function loop(t){let dt=Math.min(34,t-last||16.67);last=t;update(dt);draw();requestAnimationFrame(loop);}
+function pointer(e){if(e)e.preventDefault();if(state==='menu'){start();return;}if(state==='dead'){start();return;}if(state==='won'){start();return;}flip();}
+c.addEventListener('pointerdown',pointer);flipBtn.addEventListener('pointerdown',e=>{e.preventDefault();flip();});
+window.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();pointer(e)}});
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
